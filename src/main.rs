@@ -1,35 +1,13 @@
+use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, Select};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Nodes {
-    pub items: Vec<Item>,
-}
+mod kubectl;
+use kubectl::nodes::Nodes;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Item {
-    pub spec: Spec,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Spec {
-    #[serde(rename = "providerID")]
-    pub provider_id: String,
-}
-
-fn main() {
-    let get_nodes_cmd = Command::new("sh")
-        .arg("-c")
-        .arg("kubectl get nodes -ojson")
-        .output()
-        .expect("failed executing ec2command");
-    let nodes: Nodes =
-        serde_json::from_slice(&get_nodes_cmd.stdout).expect("failed to Deserialize");
+fn main() -> Result<()> {
+    let nodes = Nodes::get_nodes()?;
     let nodes: Vec<String> = nodes
         .items
         .iter()
@@ -56,11 +34,19 @@ fn main() {
         .unwrap()
         .to_string();
 
-    let someding = node_keys.get(selection.parse::<usize>().unwrap());
-    println!(
-        "You're about to ssh somewhere in {}!",
-        nodes_with_regions
-            .get(&someding.unwrap().to_string())
-            .unwrap()
-    );
+    let someding = node_keys.get(selection.parse::<usize>().unwrap()).unwrap();
+    let region = nodes_with_regions.get(&someding.to_string()).unwrap();
+    let last_char = region.chars().last().unwrap(); // get the last character
+    let region_trimmed = if last_char.is_alphabetic() {
+        region.trim_end_matches(last_char)
+    } else {
+        region
+    };
+    let ppid_str = std::env::var("SID").unwrap().to_string();
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("echo aws ssm start-session --region {region_trimmed} --target {someding} > /proc/{ppid_str}/fd/0"))
+        .output()
+        .expect("failed executing ec2command");
+    Ok(())
 }
