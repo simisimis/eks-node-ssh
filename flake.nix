@@ -21,7 +21,7 @@
         };
 
         rustPackage = rustPlatform.buildRustPackage {
-          name = "eks-node-ssh";
+          name = "kubetpl";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
         };
@@ -37,7 +37,7 @@
           ];
           shellHook = ''
             cat <<EOF
-            Welcome to the ❄️`eks-node-ssh` development shell.
+            Welcome to the ❄️`kubetpl` development shell.
 
             $(just -l |sed 's/^Available recipes:/The following `just` recipes are available:/')
             EOF
