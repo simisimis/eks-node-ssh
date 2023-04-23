@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use dialoguer::{theme::ColorfulTheme, Select};
 
 mod kubectl;
 use kubectl::nodes;
@@ -21,14 +22,21 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-
-    //    match &cli.command {
-    //        Commands::Node { .. } => {
-    //            println!("aws ssm start-session --region {region_trimmed} --target {someding} ")
-    //        }
-    //    }
     match &cli.command {
-        Commands::Node { .. } => nodes::generate_node_ssh_cmd()?,
+        Commands::Node { .. } => {
+            let nodes = nodes::get_node_list()?;
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select node to ssh to")
+                .default(0)
+                .items(&nodes)
+                .interact()?
+                .to_string()
+                .parse::<usize>()?;
+
+            let node_id = nodes[selection].node_id.clone();
+            let region_trimmed = nodes[selection].region.clone();
+            println!("aws ssm start-session --region {region_trimmed} --target {node_id} ");
+        }
     };
     Ok(())
 }

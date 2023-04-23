@@ -1,5 +1,4 @@
 use anyhow::{Ok, Result};
-use dialoguer::{theme::ColorfulTheme, Select};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -26,6 +25,7 @@ pub struct Spec {
 pub struct Node {
     pub node_id: String,
     pub region: String,
+    pub subregion: Option<String>,
 }
 
 impl Nodes {
@@ -50,11 +50,14 @@ impl Nodes {
 
 impl std::fmt::Display for Node {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Node: {} in {}", self.node_id, self.region)
+        match &self.subregion {
+            Some(s) => write!(f, "Node: {} in {}{}", self.node_id, self.region, s),
+            None => write!(f, "Node: {} in {}", self.node_id, self.region),
+        }
     }
 }
 
-pub fn generate_node_ssh_cmd() -> Result<()> {
+pub fn get_node_list() -> Result<Vec<Node>> {
     let node_providers: Vec<String> = Nodes::get()?.get_providers()?;
     let mut nodes: Vec<Node> = Vec::new();
     for s in node_providers {
@@ -64,25 +67,25 @@ pub fn generate_node_ssh_cmd() -> Result<()> {
             .zip(s.split('/').nth(3))
             .map(|(a, b)| (a.to_string(), b.to_string()))
             .unwrap();
-        nodes.push(Node { node_id, region });
+        let (region_trimmed, subregion) = trim_region(region)?;
+        nodes.push(Node {
+            node_id,
+            region: region_trimmed,
+            subregion,
+        });
     }
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select node to ssh to")
-        .default(0)
-        .items(&nodes)
-        .interact()?
-        .to_string()
-        .parse::<usize>()?;
 
-    let node_id = nodes[selection].node_id.clone();
-    let region = nodes[selection].region.clone();
+    Ok(nodes)
+}
+fn trim_region(region: String) -> Result<(String, Option<String>)> {
     let last_char = region.chars().last().unwrap();
-    let region_trimmed = if last_char.is_alphabetic() {
-        region.trim_end_matches(last_char)
+    let (region_trimmed, subregion) = if last_char.is_alphabetic() {
+        (
+            region.trim_end_matches(last_char),
+            Some(last_char.to_string()),
+        )
     } else {
-        region.as_str()
+        (region.as_str(), None)
     };
-    println!("aws ssm start-session --region {region_trimmed} --target {node_id} ");
-
-    Ok(())
+    Ok((region_trimmed.to_string(), subregion))
 }
